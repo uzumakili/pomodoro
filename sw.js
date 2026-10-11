@@ -1,5 +1,5 @@
 // 改動 app 檔案後把版本號加一，舊快取才會被清掉
-const CACHE = 'pomodoro-v1';
+const CACHE = 'pomodoro-v2';
 const SHELL = [
   './',
   'index.html',
@@ -18,6 +18,16 @@ self.addEventListener('activate', (e) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+// 點通知就回到 app
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) =>
+      list.length ? list[0].focus() : self.clients.openWindow('./')
+    )
   );
 });
 
