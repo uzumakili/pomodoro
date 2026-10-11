@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>專注番茄鐘</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#faf6f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1917" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="番茄鐘">
+<style>
+  :root {
+    --bg: #faf6f0;
+    --card: #ffffff;
+    --text: #2b2520;
+    --muted: #8a7f75;
+    --line: #e8e0d6;
+    --focus: #d9482b;
+    --break: #3d8b5f;
+    --accent: var(--focus);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1917;
+      --card: #272220;
+      --text: #f2ebe3;
+      --muted: #9c9189;
+      --line: #3a3330;
+      --focus: #f0694c;
+      --break: #5fb586;
+    }
+  }
+  body.on-break { --accent: var(--break); }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: calc(32px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 計時器 */
+  .modes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .modes button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .dial { position: relative; width: 240px; max-width: 100%; margin: 24px auto 16px; }
+  .dial svg { display: block; width: 100%; height: auto; transform: rotate(-90deg); }
+  .dial circle { fill: none; stroke-width: 10; }
+  .dial .track { stroke: var(--line); }
+  .dial .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .25s linear; }
+  .dial .readout {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  #time { font-size: 52px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  #working-on {
+    font-size: 13px; color: var(--muted);
+    max-width: 170px; text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .controls { display: flex; gap: 8px; justify-content: center; }
+  #toggle { background: var(--accent); border-color: var(--accent); color: #fff; padding: 10px 32px; font-size: 16px; font-weight: 600; }
+
+  .today { margin-top: 20px; text-align: center; color: var(--muted); font-size: 14px; }
+  .today strong { color: var(--text); }
+
+  details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 14px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .settings { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .settings label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13px; }
+  .settings input { width: 72px; }
+
+  input[type="text"], input[type="number"] {
+    font: inherit; color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+
+  /* 待辦 */
+  #add-form { display: flex; gap: 8px; }
+  #add-form input { flex: 1; min-width: 0; }
+  #tasks { list-style: none; margin: 16px 0 0; padding: 0; }
+  #tasks li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 8px;
+    border-radius: 10px;
+    border-left: 3px solid transparent;
+  }
+  #tasks li + li { margin-top: 2px; }
+  #tasks li.active { background: var(--bg); border-left-color: var(--accent); }
+  #tasks li.done .name { text-decoration: line-through; color: var(--muted); }
+  #tasks input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+  #tasks .name {
+    flex: 1; min-width: 0;
+    text-align: left; border: 0; border-radius: 6px; padding: 2px 4px;
+    overflow-wrap: anywhere;
+  }
+  #tasks .tomatoes { flex: none; font-size: 14px; white-space: nowrap; }
+  #tasks .del { flex: none; border: 0; padding: 2px 8px; color: var(--muted); }
+  #tasks .del:hover { color: var(--focus); }
+  .empty { color: var(--muted); font-size: 14px; margin: 16px 0 0; }
+  .list-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; color: var(--muted); }
+  .list-foot button { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <section class="card" aria-label="計時器">
+    <div class="modes">
+      <button type="button" data-mode="focus">專注</button>
+      <button type="button" data-mode="short">短休息</button>
+      <button type="button" data-mode="long">長休息</button>
+    </div>
+
+    <div class="dial">
+      <svg viewBox="0 0 240 240" aria-hidden="true">
+        <circle class="track" cx="120" cy="120" r="110"></circle>
+        <circle class="bar" id="bar" cx="120" cy="120" r="110"></circle>
+      </svg>
+      <div class="readout">
+        <div id="time" role="timer">25:00</div>
+        <div id="working-on"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button type="button" id="reset">重設</button>
+      <button type="button" id="toggle">開始</button>
+      <button type="button" id="skip">跳過</button>
+    </div>
+
+    <p class="today">今天完成 <strong id="today-count">0</strong> 顆番茄 <span id="today-row"></span></p>
+
+    <details>
+      <summary>調整時間長度</summary>
+      <div class="settings">
+        <label>專注（分）<input type="number" id="set-focus" min="1" max="120"></label>
+        <label>短休息（分）<input type="number" id="set-short" min="1" max="60"></label>
+        <label>長休息（分）<input type="number" id="set-long" min="1" max="60"></label>
+      </div>
+    </details>
+  </section>
+
+  <section class="card" aria-label="今日待辦">
+    <h1>今日待辦</h1>
+    <form id="add-form">
+      <input type="text" id="new-task" placeholder="接下來要做什麼？" maxlength="80" autocomplete="off" aria-label="新增待辦">
+      <button type="submit">新增</button>
+    </form>
+    <ul id="tasks"></ul>
+    <p class="empty" id="empty">還沒有待辦。新增一項，點它的名稱就能設為正在專注的目標。</p>
+    <div class="list-foot">
+      <span>點名稱選擇目標，完成一輪專注就得到一顆 🍅</span>
+      <button type="button" id="clear-done">清除已完成</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const STORE_KEY = 'pomodoro-v1';
+const LONG_BREAK_EVERY = 4;
+const CIRCUMFERENCE = 2 * Math.PI * 110;
+const MODE_LABEL = { focus: '專注', short: '短休息', long: '長休息' };
+
+const $ = (id) => document.getElementById(id);
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function load() {
+  const fresh = {
+    settings: { focus: 25, short: 5, long: 15 },
+    tasks: [],
+    activeId: null,
+    stats: { date: todayKey(), count: 0 },
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (saved) Object.assign(fresh, saved);
+  } catch {}
+  if (fresh.stats.date !== todayKey()) fresh.stats = { date: todayKey(), count: 0 };
+  return fresh;
+}
+
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
+}
+
+const data = load();
+
+// 計時狀態不存檔：重新整理就回到完整的一輪
+let mode = 'focus';
+let running = false;
+let endAt = 0;
+let remaining = data.settings.focus * 60000;
+let ticker = null;
+
+function totalMs() { return data.settings[mode] * 60000; }
+
+function setMode(next) {
+  stop();
+  mode = next;
+  remaining = totalMs();
+  render();
+}
+
+function start() {
+  if (running) return;
+  running = true;
+  endAt = Date.now() + remaining;
+  ticker = setInterval(tick, 250);
+  unlockAudio();
+  holdScreen();
+  render();
+}
+
+function stop() {
+  running = false;
+  clearInterval(ticker);
+  ticker = null;
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+// 手機只允許在使用者點擊時啟用聲音，所以在按下開始時先把 AudioContext 準備好
+let audio = null;
+function unlockAudio() {
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch {}
+}
+
+// 計時中保持螢幕亮著，否則手機鎖屏後時間到了也不會響
+let wakeLock = null;
+async function holdScreen() {
+  if (!running || wakeLock || !('wakeLock' in navigator)) return;
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    if (!running) { lock.release().catch(() => {}); return; }
+    wakeLock = lock;
+    lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !running) return;
+  holdScreen();
+  tick();
+});
+
+function tick() {
+  remaining = Math.max(0, endAt - Date.now());
+  if (remaining === 0) finish(); else renderTimer();
+}
+
+function finish() {
+  const finished = mode;
+  stop();
+  beep();
+  if (finished === 'focus') {
+    if (data.stats.date !== todayKey()) data.stats = { date: todayKey(), count: 0 };
+    data.stats.count++;
+    const task = data.tasks.find((t) => t.id === data.activeId && !t.done);
+    if (task) task.tomatoes++;
+    save();
+    mode = data.stats.count % LONG_BREAK_EVERY === 0 ? 'long' : 'short';
+  } else {
+    mode = 'focus';
+  }
+  remaining = totalMs();
+  render();
+}
+
+function beep() {
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+  try {
+    unlockAudio();
+    const ctx = audio;
+    [0, 0.25, 0.5].forEach((at) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.2, ctx.currentTime + at);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + at + 0.2);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + at);
+      osc.stop(ctx.currentTime + at + 0.2);
+    });
+  } catch {}
+}
+
+function formatTime(ms) {
+  const secs = Math.ceil(ms / 1000);
+  return `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+}
+
+function renderTimer() {
+  const text = formatTime(remaining);
+  $('time').textContent = text;
+  $('bar').style.strokeDasharray = CIRCUMFERENCE;
+  $('bar').style.strokeDashoffset = CIRCUMFERENCE * (1 - remaining / totalMs());
+  document.title = running ? `${text} ${MODE_LABEL[mode]}｜番茄鐘` : '專注番茄鐘';
+}
+
+function tomatoText(n) {
+  if (n === 0) return '';
+  return n <= 5 ? '🍅'.repeat(n) : `🍅×${n}`;
+}
+
+function renderTasks() {
+  const list = $('tasks');
+  list.replaceChildren();
+  for (const task of data.tasks) {
+    const li = document.createElement('li');
+    li.classList.toggle('done', task.done);
+    li.classList.toggle('active', task.id === data.activeId && !task.done);
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = task.done;
+    check.setAttribute('aria-label', `完成「${task.text}」`);
+    check.addEventListener('change', () => {
+      task.done = check.checked;
+      if (task.done && data.activeId === task.id) data.activeId = null;
+      save(); render();
+    });
+
+    const name = document.createElement('button');
+    name.type = 'button';
+    name.className = 'name';
+    name.textContent = task.text;
+    name.title = '設為正在專注的目標';
+    name.addEventListener('click', () => {
+      if (task.done) return;
+      data.activeId = data.activeId === task.id ? null : task.id;
+      save(); render();
+    });
+
+    const tomatoes = document.createElement('span');
+    tomatoes.className = 'tomatoes';
+    tomatoes.textContent = tomatoText(task.tomatoes);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'del';
+    del.textContent = '✕';
+    del.setAttribute('aria-label', `刪除「${task.text}」`);
+    del.addEventListener('click', () => {
+      data.tasks = data.tasks.filter((t) => t !== task);
+      if (data.activeId === task.id) data.activeId = null;
+      save(); render();
+    });
+
+    li.append(check, name, tomatoes, del);
+    list.append(li);
+  }
+  $('empty').hidden = data.tasks.length > 0;
+  $('clear-done').hidden = !data.tasks.some((t) => t.done);
+}
+
+function render() {
+  document.body.classList.toggle('on-break', mode !== 'focus');
+  document.querySelectorAll('.modes button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  });
+  $('toggle').textContent = running ? '暫停' : (remaining < totalMs() ? '繼續' : '開始');
+
+  const active = data.tasks.find((t) => t.id === data.activeId && !t.done);
+  $('working-on').textContent = mode === 'focus' ? (active ? active.text : '尚未選擇目標') : '休息一下';
+
+  $('today-count').textContent = data.stats.count;
+  $('today-row').textContent = tomatoText(data.stats.count);
+
+  renderTimer();
+  renderTasks();
+}
+
+// 事件
+document.querySelectorAll('.modes button').forEach((b) => {
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+});
+$('toggle').addEventListener('click', () => {
+  if (running) { stop(); render(); } else start();
+});
+$('reset').addEventListener('click', () => setMode(mode));
+$('skip').addEventListener('click', () => setMode(mode === 'focus' ? 'short' : 'focus'));
+
+$('add-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('new-task').value.trim();
+  if (!text) return;
+  const task = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text, done: false, tomatoes: 0 };
+  data.tasks.push(task);
+  if (!data.tasks.some((t) => t.id === data.activeId && !t.done)) data.activeId = task.id;
+  $('new-task').value = '';
+  save(); render();
+});
+
+$('clear-done').addEventListener('click', () => {
+  data.tasks = data.tasks.filter((t) => !t.done);
+  save(); render();
+});
+
+for (const key of ['focus', 'short', 'long']) {
+  const input = $(`set-${key}`);
+  input.value = data.settings[key];
+  input.addEventListener('change', () => {
+    const max = Number(input.max);
+    const mins = Math.min(max, Math.max(1, Math.round(Number(input.value)) || data.settings[key]));
+    input.value = mins;
+    data.settings[key] = mins;
+    save();
+    // 只在這一輪還沒開始時套用，避免打斷進行中的計時
+    if (key === mode && !running) remaining = totalMs();
+    render();
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || e.target.closest('input, button, summary')) return;
+  e.preventDefault();
+  $('toggle').click();
+});
+
+render();
+
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
